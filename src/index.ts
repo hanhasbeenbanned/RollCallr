@@ -1,6 +1,6 @@
 import inquirer from 'inquirer';
 import * as dotenv from 'dotenv';
-import { pool, connectToDb, disconnectToDb } from './connection';
+import { pool, connectToDb, disconnectToDb } from './connection.js';
 
 dotenv.config();
 
@@ -17,9 +17,11 @@ type Role = {
     title: string;
 }
 
-
-const mainMenu = async () => {
+async function connect() {
     await connectToDb();
+}
+
+async function mainMenu() {
     const { action } = await inquirer.prompt({
         type: 'list',
         name: 'action',
@@ -68,7 +70,7 @@ const mainMenu = async () => {
         case 'Quit':
             console.log('Thank you, have a great rest of your day!');
             await disconnectToDb();
-            process.exit();
+            process.exit(0);
     }
 }
 
@@ -76,12 +78,12 @@ const viewAllEmployees = async () => {
     try {
         
         const result = await pool.query(`
-            SELECT e.id, e.first_name, e.last_name, r.title, d.name as department, r.salary, 
+            SELECT e.id, e.first_name, e.last_name, r.title, d.department_name as department, r.salary, 
             CONCAT(m.first_name, ' ', m.last_name) as manager
             FROM employees e
-            LEFT JOIN roles r ON e.role_id = r.id
-            LEFT JOIN departments d ON r.department_id = d.id
-            LEFT JOIN employees m ON e.manager_id = m.id
+            JOIN roles r ON e.role_id = r.id
+             JOIN departments d ON r.department_id = d.id
+             JOIN employees m ON e.manager_id = m.id
         `);
         console.table(result.rows);
     } catch (err) {
@@ -193,7 +195,7 @@ const viewAllRoles = async () => {
     try {
         
         const result = await pool.query(`
-            SELECT r.id, r.title, d.name as department, r.salary
+            SELECT r.id, r.title, d.department_name as department, r.salary
             FROM roles r
             LEFT JOIN departments d ON r.department_id = d.id
         `);
@@ -209,9 +211,9 @@ const addRole = async () => {
         
         
         // Get departments for choices
-        const deptResult = await pool.query('SELECT id, name FROM departments');
-        const departments = deptResult.rows.map((dept: {id: number; name: string;}) => ({
-            name: dept.name,
+        const deptResult = await pool.query('SELECT id, department_name FROM departments');
+        const departments = deptResult.rows.map((dept: {id: number; department_name: string;}) => ({
+            name: dept.department_name,
             value: dept.id
         }));
 
@@ -247,16 +249,18 @@ const addRole = async () => {
     await mainMenu();
 }
 
+//#region viewAllDepartments
 const viewAllDepartments = async () => {
     try {
         
-        const result = await pool.query('SELECT id, name FROM departments');
+        const result = await pool.query('SELECT id, department_name FROM departments');
         console.table(result.rows);
     } catch (err) {
         console.error('Error viewing departments:', err);
     } 
     await mainMenu();
 }
+//#endregion
 
 const addDepartment = async () => {
     try {
@@ -271,7 +275,7 @@ const addDepartment = async () => {
         ]);
 
         await pool.query(
-            'INSERT INTO departments (name) VALUES ($1)',
+            'INSERT INTO departments (department_name) VALUES ($1)',
             [answer.name]
         );
 
@@ -281,3 +285,5 @@ const addDepartment = async () => {
     } 
     await mainMenu();
 }
+await connect();
+await mainMenu();
