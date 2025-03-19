@@ -1,10 +1,25 @@
 import inquirer from 'inquirer';
-import { Client } from 'pg';
 import * as dotenv from 'dotenv';
+import { pool, connectToDb, disconnectToDb } from './connection';
 
 dotenv.config();
 
-const mainMenu = async (): Promise<void> => {
+console.log('Welcome to the Employee Tracker!');
+
+type Employee = {
+    id: number;
+    first_name: string;
+    last_name: string;
+}
+
+type Role = {
+    id: number;
+    title: string;
+}
+
+
+const mainMenu = async () => {
+    await connectToDb();
     const { action } = await inquirer.prompt({
         type: 'list',
         name: 'action',
@@ -52,15 +67,15 @@ const mainMenu = async (): Promise<void> => {
             break;
         case 'Quit':
             console.log('Thank you, have a great rest of your day!');
+            await disconnectToDb();
             process.exit();
     }
 }
 
-const viewAllEmployees = async (): Promise<void> => {
-    const client = new Client();
+const viewAllEmployees = async () => {
     try {
-        await client.connect();
-        const result = await client.query(`
+        
+        const result = await pool.query(`
             SELECT e.id, e.first_name, e.last_name, r.title, d.name as department, r.salary, 
             CONCAT(m.first_name, ' ', m.last_name) as manager
             FROM employees e
@@ -71,31 +86,26 @@ const viewAllEmployees = async (): Promise<void> => {
         console.table(result.rows);
     } catch (err) {
         console.error('Error viewing employees:', err);
-    } finally {
-        await client.end();
-    }
+    } 
     await mainMenu();
 }
 
-const addEmployee = async (): Promise<void> => {
-    const client = new Client();
+const addEmployee = async () => {
     try {
-        await client.connect();
-        
         // Get roles for choices
-        const roleResult = await client.query('SELECT id, title FROM roles');
-        const roles = roleResult.rows.map(role => ({
+        const roleResult = await pool.query<Role>('SELECT id, title FROM roles');
+        const roles = roleResult.rows.map((role: Role) => ({
             name: role.title,
             value: role.id
         }));
 
         // Get employees for manager choices
-        const managerResult = await client.query('SELECT id, first_name, last_name FROM employees');
-        const managers = managerResult.rows.map(emp => ({
+        const managerResult = await pool.query<Employee>('SELECT id, first_name, last_name FROM employees');
+        const managers = managerResult.rows.map((emp: Employee) => ({
             name: `${emp.first_name} ${emp.last_name}`,
             value: emp.id
         }));
-        managers.unshift({ name: 'None', value: null });
+        // managers.unshift({ name: 'None', value: null });
 
         const answers = await inquirer.prompt([
             {
@@ -122,7 +132,7 @@ const addEmployee = async (): Promise<void> => {
             }
         ]);
 
-        await client.query(
+        await pool.query(
             'INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES ($1, $2, $3, $4)',
             [answers.firstName, answers.lastName, answers.roleId, answers.managerId]
         );
@@ -130,27 +140,24 @@ const addEmployee = async (): Promise<void> => {
         console.log('Employee added successfully!');
     } catch (err) {
         console.error('Error adding employee:', err);
-    } finally {
-        await client.end();
-    }
+    } 
     await mainMenu();
 }
 
-const updateEmployeeRole = async (): Promise<void> => {
-    const client = new Client();
+const updateEmployeeRole = async ()=> {
     try {
-        await client.connect();
+        
         
         // Get employees
-        const empResult = await client.query('SELECT id, first_name, last_name FROM employees');
-        const employees = empResult.rows.map(emp => ({
+        const empResult = await pool.query<Employee>('SELECT id, first_name, last_name FROM employees');
+        const employees = empResult.rows.map((emp: Employee) => ({
             name: `${emp.first_name} ${emp.last_name}`,
             value: emp.id
         }));
 
         // Get roles
-        const roleResult = await client.query('SELECT id, title FROM roles');
-        const roles = roleResult.rows.map(role => ({
+        const roleResult = await pool.query<Role>('SELECT id, title FROM roles');
+        const roles = roleResult.rows.map((role: Role) => ({
             name: role.title,
             value: role.id
         }));
@@ -170,7 +177,7 @@ const updateEmployeeRole = async (): Promise<void> => {
             }
         ]);
 
-        await client.query(
+        await pool.query(
             'UPDATE employees SET role_id = $1 WHERE id = $2',
             [answers.roleId, answers.employeeId]
         );
@@ -178,17 +185,14 @@ const updateEmployeeRole = async (): Promise<void> => {
         console.log('Employee role updated successfully!');
     } catch (err) {
         console.error('Error updating employee role:', err);
-    } finally {
-        await client.end();
-    }
+    } 
     await mainMenu();
 }
 
-const viewAllRoles = async (): Promise<void> => {
-    const client = new Client();
+const viewAllRoles = async () => {
     try {
-        await client.connect();
-        const result = await client.query(`
+        
+        const result = await pool.query(`
             SELECT r.id, r.title, d.name as department, r.salary
             FROM roles r
             LEFT JOIN departments d ON r.department_id = d.id
@@ -196,20 +200,17 @@ const viewAllRoles = async (): Promise<void> => {
         console.table(result.rows);
     } catch (err) {
         console.error('Error viewing roles:', err);
-    } finally {
-        await client.end();
-    }
+    } 
     await mainMenu();
 }
 
-const addRole = async (): Promise<void> => {
-    const client = new Client();
+const addRole = async () => {
     try {
-        await client.connect();
+        
         
         // Get departments for choices
-        const deptResult = await client.query('SELECT id, name FROM departments');
-        const departments = deptResult.rows.map(dept => ({
+        const deptResult = await pool.query('SELECT id, name FROM departments');
+        const departments = deptResult.rows.map((dept: {id: number; name: string;}) => ({
             name: dept.name,
             value: dept.id
         }));
@@ -234,7 +235,7 @@ const addRole = async (): Promise<void> => {
             }
         ]);
 
-        await client.query(
+        await pool.query(
             'INSERT INTO roles (title, salary, department_id) VALUES ($1, $2, $3)',
             [answers.title, answers.salary, answers.departmentId]
         );
@@ -242,30 +243,24 @@ const addRole = async (): Promise<void> => {
         console.log('Role added successfully!');
     } catch (err) {
         console.error('Error adding role:', err);
-    } finally {
-        await client.end();
-    }
+    } 
     await mainMenu();
 }
 
-const viewAllDepartments = async (): Promise<void> => {
-    const client = new Client();
+const viewAllDepartments = async () => {
     try {
-        await client.connect();
-        const result = await client.query('SELECT id, name FROM departments');
+        
+        const result = await pool.query('SELECT id, name FROM departments');
         console.table(result.rows);
     } catch (err) {
         console.error('Error viewing departments:', err);
-    } finally {
-        await client.end();
-    }
+    } 
     await mainMenu();
 }
 
-const addDepartment = async (): Promise<void> => {
-    const client = new Client();
+const addDepartment = async () => {
     try {
-        await client.connect();
+        
         
         const answer = await inquirer.prompt([
             {
@@ -275,7 +270,7 @@ const addDepartment = async (): Promise<void> => {
             }
         ]);
 
-        await client.query(
+        await pool.query(
             'INSERT INTO departments (name) VALUES ($1)',
             [answer.name]
         );
@@ -283,8 +278,6 @@ const addDepartment = async (): Promise<void> => {
         console.log('Department added successfully!');
     } catch (err) {
         console.error('Error adding department:', err);
-    } finally {
-        await client.end();
-    }
+    } 
     await mainMenu();
 }
