@@ -49,7 +49,7 @@ This project is licensed under the MIT license.
 
   ## Tests
   To test the application, we'll use seed data: 
-1. You'll start up the schema.sql in PostGres as the [Usage](#usage) section says but before moving on, make sure to run the command:
+1. You'll start up the schema.sql in PostgreSQL as the [Usage](#usage) section says but before moving on, make sure to run the command:
     ```bash
     \i db/seeds.sql 
 2. This will provide you with some premade data to experiment with!
